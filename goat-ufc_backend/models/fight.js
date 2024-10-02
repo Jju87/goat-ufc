@@ -1,9 +1,47 @@
 const mongoose = require('mongoose');
 
-const fightSchema = mongoose.Schema({
-    name: { type: String, required: true },
-    date: { type: String, required: true },
-    description: { type: String, required: true },
-    imageUrl: { type: String, required: true },
-    creator: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
-    });
+
+const fightSchema = new mongoose.Schema({
+  R_fighter: String,
+  B_fighter: String,
+  R_KD: Number,
+  B_KD: Number,
+  R_SIG_STR: String,
+  B_SIG_STR: String,
+  R_SIG_STR_pct: String,
+  B_SIG_STR_pct: String,
+  R_TOTAL_STR: String,
+  B_TOTAL_STR: String,
+  R_TD: String,
+  B_TD: String,
+  R_TD_pct: String,
+  B_TD_pct: String,
+  R_SUB_ATT: Number,
+  B_SUB_ATT: Number,
+  R_REV: Number,
+  B_REV: Number,
+  R_CTRL: String,
+  B_CTRL: String,
+  R_HEAD: String,
+  B_HEAD: String,
+  R_BODY: String,
+  B_BODY: String,
+  R_LEG: String,
+  B_LEG: String,
+  R_DISTANCE: String,
+  B_DISTANCE: String,
+  R_CLINCH: String,
+  B_CLINCH: String,
+  R_GROUND: String,
+  B_GROUND: String,
+  win_by: String,
+  last_round: Number,
+  last_round_time: String,
+  Format: String,
+  Referee: String,
+  date: String,
+  location: String,
+  Fight_type: String,
+  Winner: String
+});
+module.exports = mongoose.model('Fight', fightSchema);
