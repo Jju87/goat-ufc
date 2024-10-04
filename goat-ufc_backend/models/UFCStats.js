@@ -1,3 +1,5 @@
+const Fight = require('./fight');
+
 async function getUFCStats() {
     const stats = await Fight.aggregate([
         {
@@ -5,8 +7,11 @@ async function getUFCStats() {
                 _id: null,
                 totalFights: { $sum: 1 },
                 uniqueFighters: { 
-                    $addToSet: { 
-                        $setUnion: ["$R_fighter", "$B_fighter"] 
+                    $addToSet: {
+                        $concatArrays: [
+                            ["$R_fighter"], 
+                            ["$B_fighter"]
+                        ]
                     }
                 }
             }
@@ -14,7 +19,15 @@ async function getUFCStats() {
         {
             $project: {
                 totalFights: 1,
-                uniqueFightersCount: { $size: "$uniqueFighters" }
+                uniqueFightersCount: { 
+                    $size: {
+                        $reduce: {
+                            input: "$uniqueFighters",
+                            initialValue: [],
+                            in: { $setUnion: ["$$value", "$$this"] }
+                        }
+                    }
+                }
             }
         }
     ]);
@@ -27,3 +40,5 @@ async function getUFCStats() {
 
     return { totalFights: 0, uniqueFightersCount: 0, averageFights: 0 };
 }
+
+module.exports = { getUFCStats };

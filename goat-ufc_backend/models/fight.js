@@ -39,7 +39,7 @@ const fightSchema = new mongoose.Schema({
   last_round_time: String,
   Format: String,
   Referee: String,
-  date: String,
+  date: Date,
   location: String,
   Fight_type: String,
   Winner: String

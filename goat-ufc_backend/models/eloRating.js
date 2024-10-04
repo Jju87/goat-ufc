@@ -1,8 +1,12 @@
+// models/eloRating.js
+
 const mongoose = require('mongoose');
 
 const eloRatingSchema = new mongoose.Schema({
   fighter_name: { type: String, required: true, unique: true },
-  elo: { type: Number, default: 1000 },
+  basic_elo: { type: Number, default: 1000 },
+  experience_elo: { type: Number, default: 1000 },
+  fightCount: { type: Number, default: 0 },
   lastUpdated: { type: Date, default: Date.now }
 });
 
