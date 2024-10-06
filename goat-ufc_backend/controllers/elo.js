@@ -3,14 +3,13 @@
 const Fighter = require('../models/fighter');
 const Fight = require('../models/fight');
 const EloRating = require('../models/eloRating');
-const { calculateBasicElo, calculateExperienceElo } = require('../utils/eloCalculations');
+const { calculateBasicElo, calculateExperienceElo, calculateTitleFightElo} = require('../utils/eloCalculations');
 const { getUFCStats } = require('../models/UFCStats');
 
 exports.calculateAllElos = async (req, res) => {
     try {
         // Get average fights per fighter
-        const { averageFights } = await getUFCStats();
-
+        const { totalFights, uniqueFightersCount, averageFights } = await getUFCStats();
         // Delete all ELO ratings
         await EloRating.deleteMany({});
         
@@ -56,6 +55,13 @@ exports.calculateAllElos = async (req, res) => {
                 ratingB.fightCount, 
                 averageFights
             );
+            // Calculate title fight ELO
+            const { newRatingA: newTitleA, newRatingB: newTitleB, isTitleFight } = calculateTitleFightElo(
+                ratingA.titleFight_elo,
+                ratingB.titleFight_elo,
+                scoreA,
+                fight.Fight_type
+            );
 
             // Update ratings
             ratingA.basic_elo = newBasicA;
@@ -64,6 +70,8 @@ exports.calculateAllElos = async (req, res) => {
             ratingB.experience_elo = newExperienceB;
             ratingA.fightCount++;
             ratingB.fightCount++;
+            ratingA.titleFight_elo = newTitleA;
+            ratingB.titleFight_elo = newTitleB;
             ratingA.lastUpdated = fight.date;
             ratingB.lastUpdated = fight.date;
 
@@ -91,7 +99,20 @@ exports.getBasicEloRanking = async (req, res) => {
 // Get experience-adjusted ELO ranking
 exports.getExperienceEloRanking = async (req, res) => {
     try {
+        const { totalFights, uniqueFightersCount, averageFights } = await getUFCStats();
+        console.log(`Nombre total de combats : ${totalFights}`);
+        console.log(`Nombre total de combattants uniques : ${uniqueFightersCount}`);
+        console.log(`Nombre moyen de combats par combattant : ${averageFights.toFixed(2)}`);
         const rankings = await EloRating.find().sort({ experience_elo: -1 });
+        res.status(200).json(rankings);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.getTitleFightEloRanking = async (req, res) => {
+    try {
+        const rankings = await EloRating.find().sort({ titleFight_elo: -1 });
         res.status(200).json(rankings);
     } catch (error) {
         res.status(500).json({ error: error.message });
