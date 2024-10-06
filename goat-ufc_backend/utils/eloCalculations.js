@@ -26,7 +26,8 @@ function calculateExperienceElo(ratingA, ratingB, scoreA, fightCountA, fightCoun
 
 function calculateTitleFightElo(ratingA, ratingB, scoreA, fightType) {
     const BASE_K = 32;
-    const titleFightBonus = 1.5; // ou 2, selon votre préférence
+    const titleFightBonus = 1.5;
+
 
     // Vérifier si c'est un combat pour le titre
     const isTitleFight = fightType.toLowerCase().includes('title');

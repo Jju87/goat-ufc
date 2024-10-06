@@ -20,7 +20,8 @@ exports.calculateAllElos = async (req, res) => {
                 fighter_name: fighter.fighter_name, 
                 basic_elo: 1000,
                 experience_elo: 1000,
-                fightCount: 0
+                fightCount: 0,
+                titleFightCount: 0,
             });
         }
 
@@ -60,7 +61,7 @@ exports.calculateAllElos = async (req, res) => {
                 ratingA.titleFight_elo,
                 ratingB.titleFight_elo,
                 scoreA,
-                fight.Fight_type
+                fight.Fight_type,
             );
 
             // Update ratings
@@ -70,6 +71,10 @@ exports.calculateAllElos = async (req, res) => {
             ratingB.experience_elo = newExperienceB;
             ratingA.fightCount++;
             ratingB.fightCount++;
+            if (isTitleFight){
+                ratingA.titleFightCount++;
+                ratingB.titleFightCount++;
+            }
             ratingA.titleFight_elo = newTitleA;
             ratingB.titleFight_elo = newTitleB;
             ratingA.lastUpdated = fight.date;

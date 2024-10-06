@@ -8,6 +8,7 @@ const eloRatingSchema = new mongoose.Schema({
   experience_elo: { type: Number, default: 1000 },
   titleFight_elo: { type: Number, default: 1000 },
   fightCount: { type: Number, default: 0 },
+  titleFightCount: { type: Number, default: 0 },
   lastUpdated: { type: Date, default: Date.now },
 });
 
