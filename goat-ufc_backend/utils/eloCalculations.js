@@ -86,14 +86,14 @@ function calculateWinTypeElo(ratingA, ratingB, scoreA, win_By, last_Round, last_
 
     // Bonus based on win type
     if (win_By === "Submission" || win_By === "KO/TKO") {
-        bonusFactor += 0.5; // 50% bonus
+        bonusFactor += 1; // 50% bonus
     } else if (win_By === "Decision - Unanimous") {
-        bonusFactor += 0.2; // 20% bonus
+        bonusFactor += 0.3; // 20% bonus
     }
 
     // Bonus based on last round
     if (last_Round === 1 ) {
-        bonusFactor += 0.4; // 40% bonus added
+        bonusFactor += 0.5; // 40% bonus added
     } else if (last_Round === 2 ) {
         bonusFactor += 0.2; // 20% bonus added
     }
@@ -105,16 +105,14 @@ function calculateWinTypeElo(ratingA, ratingB, scoreA, win_By, last_Round, last_
     // Bonus based on last round time (only for first round)
     if (last_Round === 1) {
         if (timeInSeconds <= 30) {
-            bonusFactor += 0.5; // 50% bonus added
+            bonusFactor += 1; // 100% bonus added
         } else if (timeInSeconds <= 60) {
-            bonusFactor += 0.4; // 40% bonus added
+            bonusFactor += 0.5; // 50% bonus added
         } else if (timeInSeconds <= 120) {
-            bonusFactor += 0.3; // 30% bonus added
-        } else if (timeInSeconds <= 180) {
             bonusFactor += 0.2; // 20% bonus added
-        } else if (timeInSeconds <= 240) {
+        } else if (timeInSeconds <= 180) {
             bonusFactor += 0.1; // 10% bonus added
-        }
+        } 
     }
 
     // Apply title fight bonus if it's a title fight
@@ -136,12 +134,10 @@ function calculateWinTypeElo(ratingA, ratingB, scoreA, win_By, last_Round, last_
     };
 }
 
-function calculateStrikingElo(ratingA, ratingB, scoreA, win_By, R_KD, B_KD, R_SIG_STR, B_SIG_STR, R_SIG_STR_pct, B_SIG_STR_pct) {
-
+function calculateStrikingElo(ratingA, ratingB, scoreA, win_By, R_KD, B_KD, R_SIG_STR, B_SIG_STR, R_TOTAL_STR, B_TOTAL_STR) {
     const BASE_K = 32;
     let bonusFactor = 1;
 
-    // Fonction pour parser les coups significatifs de manière sécurisée
     function parseSigStrikes(sigStrString) {
         if (!sigStrString || typeof sigStrString !== 'string') return [0, 0];
         const parts = sigStrString.split(' of ');
@@ -158,21 +154,24 @@ function calculateStrikingElo(ratingA, ratingB, scoreA, win_By, R_KD, B_KD, R_SI
     const totalKD = (R_KD || 0) + (B_KD || 0);
     bonusFactor += totalKD * 0.2; // 20% bonus par knockdown
 
-    // Traitement des coups significatifs
-    const [R_SIG_STR_landed, R_SIG_STR_attempted] = parseSigStrikes(R_SIG_STR);
-    const [B_SIG_STR_landed, B_SIG_STR_attempted] = parseSigStrikes(B_SIG_STR);
+    // Traitement des coups significatifs et totaux
+    const [R_SIG_STR_landed, ] = parseSigStrikes(R_SIG_STR);
+    const [B_SIG_STR_landed, ] = parseSigStrikes(B_SIG_STR);
+    const [R_TOTAL_STR_landed, ] = parseSigStrikes(R_TOTAL_STR);
+    const [B_TOTAL_STR_landed, ] = parseSigStrikes(B_TOTAL_STR);
 
-    // Bonus basé sur la différence de coups significatifs
-    const sigStrikeDiff = Math.abs(R_SIG_STR_landed - B_SIG_STR_landed);
-    const strikingDominanceBonus = Math.min(sigStrikeDiff / 50, 1); // Max 100% bonus pour 50 coups de différence
-    bonusFactor += strikingDominanceBonus;
+    // Calcul des ratios et bonus
+    function calculateRatioBonus(strikerA, strikerB) {
+        if (strikerB === 0) return strikerA > 0 ? strikerA : 0; // Évite la division par zéro
+        return Math.max(0, (strikerA / strikerB) - 1); // -1 pour que le bonus commence à partir de la domination
+    }
 
-    // Bonus basé sur la précision des coups significatifs
-    const R_SIG_STR_percent = parseFloat(R_SIG_STR_pct) / 100 || 0;
-    const B_SIG_STR_percent = parseFloat(B_SIG_STR_pct) / 100 || 0;
-    const maxAccuracy = Math.max(R_SIG_STR_percent, B_SIG_STR_percent);
-    const accuracyBonus = maxAccuracy * 0.5; // Max 50% bonus pour 100% de précision
-    bonusFactor += accuracyBonus;
+    const sigStrikeBonus = calculateRatioBonus(R_SIG_STR_landed, B_SIG_STR_landed);
+    const totalStrikeBonus = calculateRatioBonus(R_TOTAL_STR_landed, B_TOTAL_STR_landed);
+
+    // Application des bonus
+    bonusFactor += sigStrikeBonus;
+    bonusFactor += totalStrikeBonus;
 
     // Application du facteur de bonus au facteur K
     const K = BASE_K * bonusFactor;
@@ -182,14 +181,14 @@ function calculateStrikingElo(ratingA, ratingB, scoreA, win_By, R_KD, B_KD, R_SI
     const newRatingA = ratingA + K * (scoreA - expectedScoreA);
     const newRatingB = ratingB + K * ((1 - scoreA) - (1 - expectedScoreA));
 
-    const result = { 
+    return { 
         newRatingA: Math.round(newRatingA), 
         newRatingB: Math.round(newRatingB),
         bonusFactor,
         effectiveK: K,
+        sigStrikeBonus,
+        totalStrikeBonus
     };
-
-    return result;
-}
+};
 
 module.exports = { calculateBasicElo, calculateExperienceElo, calculateTitleFightElo, calculateWinTypeElo, calculateStrikingElo };

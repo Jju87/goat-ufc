@@ -91,7 +91,7 @@ exports.calculateAllElos = async (req, res) => {
                 fight.last_round_time,
                 isTitleFight
             );
-
+            // Calculate striking ELO
             const {newRatingA: newStrikingA, newRatingB: newStrikingB } = calculateStrikingElo(
                 ratingA.striking_elo, 
                 ratingB.striking_elo, 
@@ -101,8 +101,8 @@ exports.calculateAllElos = async (req, res) => {
                 fight.B_KD,
                 fight.R_SIG_STR,
                 fight.B_SIG_STR,
-                fight.R_SIG_STR_pct,
-                fight.B_SIG_STR_pct,
+                fight.R_TOTAL_STR,
+                fight.B_TOTAL_STR
 
             );
             
@@ -141,21 +141,18 @@ exports.getBasicEloRanking = async (req, res) => {
     try {
         const rankings = await EloRating.find().sort({ basic_elo: -1 });
 
-        // Get the 1000 most recent fights
-        const recentFights = await Fight.find().sort({ date: -1 }).limit(1000);
+        // Get all fights, sorted by date in ascending order
+        const allFights = await Fight.find().sort({ date: 1 });
 
-        logToFile("Détails des 40 derniers combats:");
+        logToFile("Simulation de l'évolution des ELO:");
 
-        for (const fight of recentFights) {
-            const [ratingA, ratingB] = await Promise.all([
-                EloRating.findOne({ fighter_name: fight.R_fighter }),
-                EloRating.findOne({ fighter_name: fight.B_fighter })
-            ]);
+        // Create a map to store the current ELO for each fighter
+        const currentElo = new Map();
 
-            if (!ratingA || !ratingB) {
-                console.log(`Données manquantes pour le combat: ${fight.R_fighter} vs ${fight.B_fighter}`);
-                continue;
-            }
+        for (const fight of allFights) {
+            // Get or initialize the current ELO for both fighters
+            const ratingA = currentElo.get(fight.R_fighter) || 1000;
+            const ratingB = currentElo.get(fight.B_fighter) || 1000;
 
             let scoreA;
             if (fight.Winner === fight.R_fighter) scoreA = 1;
@@ -163,20 +160,25 @@ exports.getBasicEloRanking = async (req, res) => {
             else scoreA = 0.5;
 
             const { newRatingA, newRatingB, changeA, changeB } = calculateBasicElo(
-                ratingA.basic_elo,
-                ratingB.basic_elo,
+                ratingA,
+                ratingB,
                 scoreA
             );
 
+            // Update the current ELO for both fighters
+            currentElo.set(fight.R_fighter, newRatingA);
+            currentElo.set(fight.B_fighter, newRatingB);
+
             logToFile(`
                 Date: ${new Date(fight.date).toLocaleDateString()}
-                Combat: ${fight.R_fighter} vs ${fight.B_fighter}
-                Résultat: ${fight.Winner === fight.R_fighter ? fight.R_fighter + " gagne" : 
-                            fight.Winner === fight.B_fighter ? fight.B_fighter + " gagne" : "Match nul"}
-                ${fight.R_fighter}: ${ratingA.basic_elo} -> ${newRatingA} (${changeA > 0 ? "+" : ""}${changeA})
-                ${fight.B_fighter}: ${ratingB.basic_elo} -> ${newRatingB} (${changeB > 0 ? "+" : ""}${changeB})
+                Fight: ${fight.R_fighter} vs ${fight.B_fighter}
+                Result: ${fight.Winner === fight.R_fighter ? fight.R_fighter + " wins" : 
+                            fight.Winner === fight.B_fighter ? fight.B_fighter + " wins" : "Draw or No Contest"}
+                ${fight.R_fighter}: ${ratingA} -> ${newRatingA} (${changeA > 0 ? "+" : ""}${changeA})
+                ${fight.B_fighter}: ${ratingB} -> ${newRatingB} (${changeB > 0 ? "+" : ""}${changeB})
             `);
         }
+
         res.status(200).json(rankings);
     } catch (error) {
         res.status(500).json({ error: error.message });
