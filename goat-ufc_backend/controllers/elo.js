@@ -3,7 +3,7 @@
 const Fighter = require('../models/fighter');
 const Fight = require('../models/fight');
 const EloRating = require('../models/eloRating');
-const { calculateBasicElo, calculateExperienceElo, calculateTitleFightElo, calculateWinTypeElo, calculateStrikingElo} = require('../utils/eloCalculations');
+const { calculateBasicElo, calculateExperienceElo, calculateTitleFightElo, calculateWinTypeElo, calculateStrikingElo, calculateGroundElo, calculateActivityElo, calculateWinStreakElo} = require('../utils/eloCalculations');
 const { getUFCStats } = require('../models/UFCStats');
 const fs = require('fs');
 const path = require('path');
@@ -31,6 +31,7 @@ exports.calculateAllElos = async (req, res) => {
                 experience_elo: 1000,
                 fightCount: 0,
                 titleFightCount: 0,
+                currentWinStreak: 0,
             });
         }
 
@@ -105,7 +106,40 @@ exports.calculateAllElos = async (req, res) => {
                 fight.B_TOTAL_STR
 
             );
+
+            // Calculate ground ELO
+            const {newRatingA: newGroundA, newRatingB: newGroundB } = calculateGroundElo(
+                ratingA.ground_elo,
+                ratingB.ground_elo,
+                scoreA,
+                fight.win_by,
+                fight.R_TD,
+                fight.B_TD,
+                fight.R_CTRL,
+                fight.B_CTRL,
+                fight.R_GROUND,
+                fight.B_GROUND
+            );
+
+            // Calculate activity ELO
+            const { newRatingA: newActivityA, newRatingB: newActivityB } = calculateActivityElo(
+                ratingA.activity_elo,
+                ratingB.activity_elo,
+                scoreA,
+                fight,
+                fights
+            );
             
+            const { newRatingA: newWinStreakA, newRatingB: newWinStreakB, 
+                winStreakBonusA, winStreakBonusB, 
+                newCurrentWinStreakA, newCurrentWinStreakB } = calculateWinStreakElo(
+            ratingA.winStreak_elo,
+            ratingB.winStreak_elo,
+            scoreA,
+            fight,
+            fights
+        );
+
             // Update ratings
             ratingA.basic_elo = newBasicA;
             ratingB.basic_elo = newBasicB;
@@ -123,6 +157,14 @@ exports.calculateAllElos = async (req, res) => {
             ratingB.winType_elo = newWinTypeB;
             ratingA.striking_elo = newStrikingA;
             ratingB.striking_elo = newStrikingB;
+            ratingA.ground_elo = newGroundA;
+            ratingB.ground_elo = newGroundB;
+            ratingA.activity_elo = newActivityA;
+            ratingB.activity_elo = newActivityB;
+            ratingA.winStreak_elo = newWinStreakA;
+            ratingB.winStreak_elo = newWinStreakB;
+            ratingA.currentWinStreak = newCurrentWinStreakA;
+            ratingB.currentWinStreak = newCurrentWinStreakB;
             ratingA.lastUpdated = fight.date;
             ratingB.lastUpdated = fight.date;
 
@@ -281,6 +323,33 @@ exports.getWinTypeEloRanking = async (req, res) => {
 exports.getStrikingEloRanking = async (req, res) => {
     try {
         const rankings = await EloRating.find().sort({ striking_elo: -1 });
+        res.status(200).json(rankings);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.getGroundEloRanking = async (req, res) => {
+    try {
+        const rankings = await EloRating.find().sort({ ground_elo: -1 });
+        res.status(200).json(rankings);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.getActivityEloRanking = async (req, res) => {
+    try {
+        const rankings = await EloRating.find().sort({ activity_elo: -1 });
+        res.status(200).json(rankings);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.getWinStreakEloRanking = async (req, res) => {
+    try {
+        const rankings = await EloRating.find().sort({ winStreak_elo: -1 });
         res.status(200).json(rankings);
     } catch (error) {
         res.status(500).json({ error: error.message });
