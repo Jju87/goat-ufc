@@ -3,7 +3,7 @@
 const Fighter = require('../models/fighter');
 const Fight = require('../models/fight');
 const EloRating = require('../models/eloRating');
-const { calculateBasicElo, calculateExperienceElo, calculateTitleFightElo, calculateWinTypeElo, calculateStrikingElo, calculateGroundElo, calculateActivityElo, calculateWinStreakElo} = require('../utils/eloCalculations');
+const { calculateBasicElo, calculateExperienceElo, calculateTitleFightElo, calculateWinTypeElo, calculateStrikingElo, calculateGroundElo, calculateActivityElo, calculateWinStreakElo, calculateCategoryElo, calculateCombinedElo, calculatePeakElo} = require('../utils/eloCalculations');
 const { getUFCStats } = require('../models/UFCStats');
 const fs = require('fs');
 const path = require('path');
@@ -130,6 +130,7 @@ exports.calculateAllElos = async (req, res) => {
                 fights
             );
             
+            // Calculate win streak ELO
             const { newRatingA: newWinStreakA, newRatingB: newWinStreakB, 
                 winStreakBonusA, winStreakBonusB, 
                 newCurrentWinStreakA, newCurrentWinStreakB } = calculateWinStreakElo(
@@ -138,7 +139,26 @@ exports.calculateAllElos = async (req, res) => {
             scoreA,
             fight,
             fights
-        );
+            );
+
+            // Calculate category ELO
+            const { newRatingA: newCategoryEloA, newRatingB: newCategoryEloB, isDoubleChampA, isDoubleChampB } = calculateCategoryElo(
+                ratingA.category_elo,
+                ratingB.category_elo,
+                scoreA,
+                fight,
+                ratingA,
+                ratingB
+            );
+
+            //Calculate combined ELO
+            const { newRatingA: newCombinedA, newRatingB: newCombinedB } = calculateCombinedElo(
+                ratingA.combined_elo,
+                ratingB.combined_elo,
+                scoreA,
+                ratingA,
+                ratingB,
+            );
 
             // Update ratings
             ratingA.basic_elo = newBasicA;
@@ -153,6 +173,22 @@ exports.calculateAllElos = async (req, res) => {
             }
             ratingA.titleFight_elo = newTitleA;
             ratingB.titleFight_elo = newTitleB;
+            ratingA.category_elo = newCategoryEloA;
+            ratingB.category_elo = newCategoryEloB;
+            if (isDoubleChampA) {
+                ratingA.doubleChampAchievements = ratingA.doubleChampAchievements || [];
+                ratingA.doubleChampAchievements.push({ 
+                    date: fight.date, 
+                    weightClasses: [...ratingA.titleWeightClassesWon] 
+                });
+            }
+            if (isDoubleChampB) {
+                ratingB.doubleChampAchievements = ratingB.doubleChampAchievements || [];
+                ratingB.doubleChampAchievements.push({ 
+                    date: fight.date, 
+                    weightClasses: [...ratingB.titleWeightClassesWon] 
+                });
+            }
             ratingA.winType_elo = newWinTypeA;
             ratingB.winType_elo = newWinTypeB;
             ratingA.striking_elo = newStrikingA;
@@ -165,9 +201,30 @@ exports.calculateAllElos = async (req, res) => {
             ratingB.winStreak_elo = newWinStreakB;
             ratingA.currentWinStreak = newCurrentWinStreakA;
             ratingB.currentWinStreak = newCurrentWinStreakB;
+            ratingA.combined_elo = newCombinedA;
+            ratingB.combined_elo = newCombinedB;
             ratingA.lastUpdated = fight.date;
             ratingB.lastUpdated = fight.date;
 
+            // Update highest win streaks
+            ratingA.highestWinStreak = Math.max(ratingA.highestWinStreak || 0, ratingA.currentWinStreak);
+            ratingB.highestWinStreak = Math.max(ratingB.highestWinStreak || 0, ratingB.currentWinStreak);
+
+            const newPeakA = calculatePeakElo(ratingA.peak_elo, newCombinedA, fight.date, ratingA.currentWinStreak);
+            const newPeakB = calculatePeakElo(ratingB.peak_elo, newCombinedB, fight.date, ratingB.currentWinStreak);
+
+            // Mise à jour du peak ELO si nécessaire
+            if (newPeakA) {
+                ratingA.peak_elo = newPeakA.peak_elo;
+                ratingA.peak_elo_date = newPeakA.peak_elo_date;
+                ratingA.peak_elo_winStreak = newPeakA.peak_elo_winStreak;
+            }
+            if (newPeakB) {
+                ratingB.peak_elo = newPeakB.peak_elo;
+                ratingB.peak_elo_date = newPeakB.peak_elo_date;
+                ratingB.peak_elo_winStreak = newPeakB.peak_elo_winStreak;
+            
+            }
             // Promise.all is used to update both ratings at the same time
             await Promise.all([ratingA.save(), ratingB.save()]);
         }
@@ -355,3 +412,30 @@ exports.getWinStreakEloRanking = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+exports.getCombinedEloRanking = async (req, res) => {
+    try {
+        const rankings = await EloRating.find().sort({ combined_elo: -1 });
+        res.status(200).json(rankings);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}
+
+exports.getCategoryEloRanking = async (req, res) => {
+    try {
+        const rankings = await EloRating.find().sort({ category_elo: -1 });
+        res.status(200).json(rankings);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}
+
+exports.getPeakEloRanking = async (req, res) => {
+    try {
+        const rankings = await EloRating.find().sort({ peak_elo: -1 });
+        res.status(200).json(rankings);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}

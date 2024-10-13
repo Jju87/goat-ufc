@@ -61,7 +61,7 @@ function calculateExperienceElo(ratingA, ratingB, scoreA, fightCountA, fightCoun
 
 function calculateTitleFightElo(ratingA, ratingB, scoreA, fightType) {
     const BASE_K = 32;
-    const titleFightBonus = 1.5; // 50% bonus
+    const titleFightBonus = 2.5; // 150% bonus pour les combats de titre
 
     // Vérifier si c'est un combat pour le titre
     const isTitleFight = fightType.toLowerCase().includes('title');
@@ -397,4 +397,122 @@ function calculateWinStreakElo(ratingA, ratingB, scoreA, currentFight, allFights
     };
 }
 
-module.exports = { calculateBasicElo, calculateExperienceElo, calculateTitleFightElo, calculateWinTypeElo, calculateStrikingElo, calculateGroundElo, calculateActivityElo, calculateWinStreakElo };
+
+function calculateCombinedElo(ratingA, ratingB, scoreA, fighterA, fighterB) {
+    const BASE_K = 32;
+    const weights = {
+        basic: 0.8,
+        experience: 0.8,
+        activity: 0.8,
+        winType: 1,
+        striking: 0.9,
+        ground: 0.9,
+        winStreak: 1,
+        category: 1
+    };
+
+    function calculateWeightedElo(fighter) {
+        let totalWeight = 0;
+        let weightedSum = 0;
+        for (const [type, weight] of Object.entries(weights)) {
+            if (fighter[`${type}_elo`]) {
+                weightedSum += fighter[`${type}_elo`] * weight;
+                totalWeight += weight;
+            }
+        }
+        return weightedSum / totalWeight;
+    }
+
+    const weightedEloA = calculateWeightedElo(fighterA);
+    const weightedEloB = calculateWeightedElo(fighterB);
+
+    const expectedScoreA = 1 / (1 + Math.pow(10, (weightedEloB - weightedEloA) / 400));
+    const changeA = BASE_K * (scoreA - expectedScoreA);
+
+    const newRatingA = weightedEloA + changeA;
+    const newRatingB = weightedEloB - changeA;
+
+    return {
+        newRatingA: Math.round(newRatingA),
+        newRatingB: Math.round(newRatingB),
+        changeA: Math.round(changeA),
+        changeB: Math.round(-changeA)
+    };
+}
+
+function calculateCategoryElo(ratingA, ratingB, scoreA, fight, fighterA, fighterB) {
+    const BASE_K = 32;
+    const DOUBLE_CHAMP_BONUS = 10;
+    const MAX_LOSER_PENALTY = 32; // Perte maximale pour le perdant
+
+    // ... (les fonctions parseWeightClass, isNewTitleWin, et updateTitlesWon restent inchangées)
+
+    let bonusA = 1;
+    let bonusB = 1;
+    let isDoubleChampA = false;
+    let isDoubleChampB = false;
+
+    if (scoreA === 1 && isNewTitleWin(fighterA, fight.Fight_type)) {
+        if (fighterA.titleWeightClassesWon && fighterA.titleWeightClassesWon.length > 0) {
+            bonusA = DOUBLE_CHAMP_BONUS;
+            isDoubleChampA = true;
+        }
+        updateTitlesWon(fighterA, fight.Fight_type);
+    } else if (scoreA === 0 && isNewTitleWin(fighterB, fight.Fight_type)) {
+        if (fighterB.titleWeightClassesWon && fighterB.titleWeightClassesWon.length > 0) {
+            bonusB = DOUBLE_CHAMP_BONUS;
+            isDoubleChampB = true;
+        }
+        updateTitlesWon(fighterB, fight.Fight_type);
+    }
+
+    const KA = BASE_K * bonusA;
+    const KB = BASE_K * bonusB;
+
+    const expectedScoreA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+    let changeA = KA * (scoreA - expectedScoreA);
+    let changeB = KB * ((1 - scoreA) - (1 - expectedScoreA));
+
+    // Limiter la perte pour le perdant
+    if (changeA < -MAX_LOSER_PENALTY) changeA = -MAX_LOSER_PENALTY;
+    if (changeB < -MAX_LOSER_PENALTY) changeB = -MAX_LOSER_PENALTY;
+
+    const newRatingA = ratingA + changeA;
+    const newRatingB = ratingB + changeB;
+
+    return {
+        newRatingA: Math.round(newRatingA),
+        newRatingB: Math.round(newRatingB),
+        bonusFactorA: bonusA,
+        bonusFactorB: bonusB,
+        isDoubleChampA,
+        isDoubleChampB,
+        changeA: Math.round(changeA),
+        changeB: Math.round(changeB)
+    };
+}
+
+function calculatePeakElo(currentPeakElo, newCombinedElo, currentDate, currentWinStreak) {
+    if (newCombinedElo > currentPeakElo) {
+        return {
+            peak_elo: newCombinedElo,
+            peak_elo_date: currentDate,
+            peak_elo_winStreak: currentWinStreak
+        };
+    }
+    return null; // Retourne null si le peak ELO n'a pas changé
+}
+
+module.exports = { 
+    calculateBasicElo, 
+    calculateExperienceElo, 
+    calculateTitleFightElo, 
+    calculateWinTypeElo, 
+    calculateStrikingElo, 
+    calculateGroundElo, 
+    calculateActivityElo, 
+    calculateWinStreakElo, 
+    calculateCombinedElo,
+    calculateCategoryElo, 
+    calculatePeakElo,
+};
