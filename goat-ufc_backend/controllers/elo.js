@@ -9,8 +9,11 @@ const fs = require('fs');
 const path = require('path');
 const util = require('util');
 
-function logToFile(data) {
-    const logStream = fs.createWriteStream('elo_calculation.log', {flags: 'a'});     logStream.write(util.format(data) + '\n');
+function logToFile(message, logType) {
+    const logFileName = `${logType}_elo_calculation.log`;
+    const logFilePath = path.join(__dirname, logFileName);
+    
+    fs.appendFileSync(logFilePath, message + '\n', 'utf8');
 }
 
 exports.calculateAllElos = async (req, res) => {
@@ -275,7 +278,7 @@ exports.getBasicEloRanking = async (req, res) => {
                             fight.Winner === fight.B_fighter ? fight.B_fighter + " wins" : "Draw or No Contest"}
                 ${fight.R_fighter}: ${ratingA} -> ${newRatingA} (${changeA > 0 ? "+" : ""}${changeA})
                 ${fight.B_fighter}: ${ratingB} -> ${newRatingB} (${changeB > 0 ? "+" : ""}${changeB})
-            `);
+            `, 'basic');
         }
 
         res.status(200).json(rankings);
@@ -413,15 +416,6 @@ exports.getWinStreakEloRanking = async (req, res) => {
     }
 };
 
-exports.getCombinedEloRanking = async (req, res) => {
-    try {
-        const rankings = await EloRating.find().sort({ combined_elo: -1 });
-        res.status(200).json(rankings);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-}
-
 exports.getCategoryEloRanking = async (req, res) => {
     try {
         const rankings = await EloRating.find().sort({ category_elo: -1 });
@@ -429,6 +423,81 @@ exports.getCategoryEloRanking = async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+};
+
+exports.getCombinedEloRanking = async (req, res) => {
+    try {
+        const rankings = await EloRating.find().sort({ combined_elo: -1 });
+        const allFights = await Fight.find().sort({ date: 1 });
+
+        logToFile("Simulation de l'évolution des Combined ELO:", 'combined');
+
+        const currentElos = new Map();
+
+        for (const fight of allFights) {
+            const fighterA = await getOrCreateFighter(fight.R_fighter, currentElos);
+            const fighterB = await getOrCreateFighter(fight.B_fighter, currentElos);
+
+            let scoreA;
+            if (fight.Winner === fight.R_fighter) scoreA = 1;
+            else if (fight.Winner === fight.B_fighter) scoreA = 0;
+            else scoreA = 0.5;
+
+            const { newRatingA, newRatingB, changeA, changeB } = calculateCombinedElo(
+                fighterA.combined_elo,
+                fighterB.combined_elo,
+                scoreA,
+                fighterA,
+                fighterB
+            );
+
+            logToFile(`
+                Date: ${new Date(fight.date).toLocaleDateString()}
+                Fight: ${fight.R_fighter} vs ${fight.B_fighter}
+                Result: ${fight.Winner === fight.R_fighter ? fight.R_fighter + " wins" : 
+                            fight.Winner === fight.B_fighter ? fight.B_fighter + " wins" : "Draw or No Contest"}
+                ${fight.R_fighter}: ${fighterA.combined_elo.toFixed(2)} -> ${newRatingA.toFixed(2)} (${changeA >= 0 ? "+" : ""}${changeA.toFixed(2)})
+                ${fight.B_fighter}: ${fighterB.combined_elo.toFixed(2)} -> ${newRatingB.toFixed(2)} (${changeB >= 0 ? "+" : ""}${changeB.toFixed(2)})
+            `, 'combined');
+
+            updateFighterElo(fighterA, newRatingA, currentElos);
+            updateFighterElo(fighterB, newRatingB, currentElos);
+        }
+
+        res.status(200).json(rankings);
+    } catch (error) {
+        logToFile(`Error: ${error.message}`, 'combined');
+        res.status(500).json({ error: error.message });
+    }
+};
+
+async function getOrCreateFighter(fighterName, currentElos) {
+    if (!currentElos.has(fighterName)) {
+        const fighter = await EloRating.findOne({ fighter_name: fighterName }) || createInitialFighterObject(fighterName);
+        currentElos.set(fighterName, fighter);
+    }
+    return currentElos.get(fighterName);
+}
+
+function createInitialFighterObject(fighterName) {
+    return {
+        fighter_name: fighterName,
+        basic_elo: 1000,
+        experience_elo: 1000,
+        titleFight_elo: 1000,
+        winType_elo: 1000,
+        striking_elo: 1000,
+        ground_elo: 1000,
+        activity_elo: 1000,
+        winStreak_elo: 1000,
+        category_elo: 1000,
+        combined_elo: 1000
+    };
+}
+
+function updateFighterElo(fighter, newElo, currentElos) {
+    fighter.combined_elo = newElo;
+    currentElos.set(fighter.fighter_name, fighter);
 }
 
 exports.getPeakEloRanking = async (req, res) => {

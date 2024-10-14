@@ -6,8 +6,8 @@ function calculateBasicElo(ratingA, ratingB, scoreA) {
     const newRatingB = ratingB - changeA;
 
     return { 
-        newRatingA: Math.round(newRatingA), 
-        newRatingB: Math.round(newRatingB),
+        newRatingA: newRatingA, 
+        newRatingB: newRatingB,
         changeA: Math.round(changeA),
         changeB: Math.round(-changeA)
     };
@@ -41,8 +41,8 @@ function calculateExperienceElo(ratingA, ratingB, scoreA, fightCountA, fightCoun
     const expectedScoreA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
     const changeA = kFactorA * (scoreA - expectedScoreA);
 
-    const newRatingA = Math.max(Math.round(ratingA + changeA), 0);
-    const newRatingB = Math.max(Math.round(ratingB - changeA), 0);
+    const newRatingA = Math.max((ratingA + changeA), 0);
+    const newRatingB = Math.max((ratingB - changeA), 0);
 
     // Vérification finale pour NaN
     if (isNaN(newRatingA) || isNaN(newRatingB)) {
@@ -56,12 +56,17 @@ function calculateExperienceElo(ratingA, ratingB, scoreA, fightCountA, fightCoun
         };
     }
 
-    return { newRatingA, newRatingB, kFactorA, kFactorB };
+    return { 
+        newRatingA: Math.max(newRatingA, 0),
+        newRatingB: Math.max(newRatingB, 0),
+        kFactorA, 
+        kFactorB    
+    };
 }
 
 function calculateTitleFightElo(ratingA, ratingB, scoreA, fightType) {
     const BASE_K = 32;
-    const titleFightBonus = 2.5; // 150% bonus pour les combats de titre
+    const titleFightBonus = 3; // 300% bonus pour les combats de titre
 
     // Vérifier si c'est un combat pour le titre
     const isTitleFight = fightType.toLowerCase().includes('title');
@@ -74,8 +79,8 @@ function calculateTitleFightElo(ratingA, ratingB, scoreA, fightType) {
     const newRatingB = ratingB + K * ((1 - scoreA) - (1 - expectedScoreA));
 
     return { 
-        newRatingA: Math.round(newRatingA), 
-        newRatingB: Math.round(newRatingB),
+        newRatingA: newRatingA, 
+        newRatingB: newRatingB,
         isTitleFight: isTitleFight
     };
 }
@@ -127,8 +132,8 @@ function calculateWinTypeElo(ratingA, ratingB, scoreA, win_By, last_Round, last_
     const newRatingB = ratingB + K * ((1 - scoreA) - (1 - expectedScoreA));
 
     return { 
-        newRatingA: Math.round(newRatingA), 
-        newRatingB: Math.round(newRatingB),
+        newRatingA: newRatingA, 
+        newRatingB: newRatingB,
         bonusFactor,
         effectiveK: K,
     };
@@ -183,8 +188,8 @@ function calculateStrikingElo(ratingA, ratingB, scoreA, win_By, R_KD, B_KD, R_SI
     const newRatingB = ratingB + K * ((1 - scoreA) - (1 - expectedScoreA));
 
     return { 
-        newRatingA: Math.round(newRatingA), 
-        newRatingB: Math.round(newRatingB),
+        newRatingA: newRatingA, 
+        newRatingB: newRatingB,
         bonusFactor,
         effectiveK: K,
         sigStrikeBonus,
@@ -263,8 +268,8 @@ function calculateGroundElo(ratingA, ratingB, scoreA, win_By, R_TD, B_TD, R_CTRL
     const newRatingB = ratingB + K * ((1 - scoreA) - (1 - expectedScoreA));
 
     return { 
-        newRatingA: Math.round(newRatingA) || 1000, 
-        newRatingB: Math.round(newRatingB) || 1000,
+        newRatingA: newRatingA || 1000, 
+        newRatingB: newRatingB || 1000,
         bonusFactor,
         effectiveK: K,
         takedownBonus,
@@ -331,8 +336,8 @@ function calculateActivityElo(ratingA, ratingB, scoreA, currentFight, allFights)
     const newRatingB = ratingB + KB * ((1 - scoreA) - (1 - expectedScoreA));
 
     return { 
-        newRatingA: Math.round(newRatingA), 
-        newRatingB: Math.round(newRatingB),
+        newRatingA: newRatingA, 
+        newRatingB: newRatingB,
         activityBonusA: scoreA === 1 ? activityBonusA : 1,
         activityBonusB: scoreA === 0 ? activityBonusB : 1
     };
@@ -388,8 +393,8 @@ function calculateWinStreakElo(ratingA, ratingB, scoreA, currentFight, allFights
     const newCurrentWinStreakB = scoreA === 0 ? currentWinStreakB + 1 : 0;
 
     return { 
-        newRatingA: Math.round(newRatingA), 
-        newRatingB: Math.round(newRatingB),
+        newRatingA: newRatingA, 
+        newRatingB: newRatingB,
         winStreakBonusA: bonusA,
         winStreakBonusB: bonusB,
         newCurrentWinStreakA,
@@ -403,12 +408,13 @@ function calculateCombinedElo(ratingA, ratingB, scoreA, fighterA, fighterB) {
     const weights = {
         basic: 0.8,
         experience: 0.8,
-        activity: 0.8,
-        winType: 1,
-        striking: 0.9,
-        ground: 0.9,
-        winStreak: 1,
-        category: 1
+        titleFight: 1.4,
+        activity: 1.2,
+        winType: 1.4,
+        striking: 1.2,
+        ground: 1.2,
+        winStreak: 1.4,
+        category: 1.4
     };
 
     function calculateWeightedElo(fighter) {
@@ -433,8 +439,8 @@ function calculateCombinedElo(ratingA, ratingB, scoreA, fighterA, fighterB) {
     const newRatingB = weightedEloB - changeA;
 
     return {
-        newRatingA: Math.round(newRatingA),
-        newRatingB: Math.round(newRatingB),
+        newRatingA: newRatingA,
+        newRatingB: newRatingB,
         changeA: Math.round(changeA),
         changeB: Math.round(-changeA)
     };
@@ -442,10 +448,48 @@ function calculateCombinedElo(ratingA, ratingB, scoreA, fighterA, fighterB) {
 
 function calculateCategoryElo(ratingA, ratingB, scoreA, fight, fighterA, fighterB) {
     const BASE_K = 32;
-    const DOUBLE_CHAMP_BONUS = 10;
+    const DOUBLE_CHAMP_BONUS = 10; // Un bonus multiplicateur très élevé
     const MAX_LOSER_PENALTY = 32; // Perte maximale pour le perdant
 
-    // ... (les fonctions parseWeightClass, isNewTitleWin, et updateTitlesWon restent inchangées)
+
+    function parseWeightClass(fightType) {
+        const weightClasses = [
+            "Flyweight", "Bantamweight", "Featherweight", "Lightweight",
+            "Welterweight", "Middleweight", "Light Heavyweight", "Heavyweight",
+            "Women's Strawweight", "Women's Flyweight", "Women's Bantamweight",
+            "Women's Featherweight"
+        ];
+        
+        for (let weightClass of weightClasses) {
+            if (fightType.includes(weightClass)) {
+                return weightClass;
+            }
+        }
+        return null;
+    }
+
+    function isOfficialUFCTitleFight(fightType) {
+        return fightType.startsWith("UFC") && fightType.toLowerCase().includes("title bout");
+    }
+
+    function isNewTitleWin(fighter, fightType) {
+        if (!isOfficialUFCTitleFight(fightType)) return false;
+
+        const newWeightClass = parseWeightClass(fightType);
+        return newWeightClass && (!fighter.titleWeightClassesWon || !fighter.titleWeightClassesWon.includes(newWeightClass));
+    }
+
+    function updateTitlesWon(fighter, fightType) {
+        if (!isOfficialUFCTitleFight(fightType)) return;
+
+        if (!fighter.titleWeightClassesWon) {
+            fighter.titleWeightClassesWon = [];
+        }
+        const newWeightClass = parseWeightClass(fightType);
+        if (newWeightClass && !fighter.titleWeightClassesWon.includes(newWeightClass)) {
+            fighter.titleWeightClassesWon.push(newWeightClass);
+        }
+    }
 
     let bonusA = 1;
     let bonusB = 1;
@@ -481,8 +525,8 @@ function calculateCategoryElo(ratingA, ratingB, scoreA, fight, fighterA, fighter
     const newRatingB = ratingB + changeB;
 
     return {
-        newRatingA: Math.round(newRatingA),
-        newRatingB: Math.round(newRatingB),
+        newRatingA: newRatingA,
+        newRatingB: newRatingB,
         bonusFactorA: bonusA,
         bonusFactorB: bonusB,
         isDoubleChampA,

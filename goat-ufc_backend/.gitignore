@@ -1,4 +1,7 @@
 node_modules
 /data
 elo_calculation.log
+basic_elo_calculation.log
+combined_elo_calculation.log
+peak_elo_calculation.log
 .env
