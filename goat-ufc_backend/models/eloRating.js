@@ -14,6 +14,10 @@ const eloRatingSchema = new mongoose.Schema({
   winStreak_elo: { type: Number, default: 1000 },
   category_elo: { type: Number, default: 1000 },
   combined_elo: { type: Number, default: 1000 },
+  combinedEloEvolution: [{ 
+    elo: Number, 
+    date: Date 
+  }],
   peak_elo: { type: Number, default: 1000 }, 
   peak_elo_date: Date, 
   peak_elo_winStreak: Number,  
@@ -27,6 +31,7 @@ const eloRatingSchema = new mongoose.Schema({
   }],
   titleWeightClassesWon: [String],
   lastUpdated: { type: Date, default: Date.now },
+
 });
 
 module.exports = mongoose.model('EloRating', eloRatingSchema);

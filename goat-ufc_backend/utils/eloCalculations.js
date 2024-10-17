@@ -536,6 +536,100 @@ function calculateCategoryElo(ratingA, ratingB, scoreA, fight, fighterA, fighter
     };
 }
 
+function calculateCombinedElo(ratingA, ratingB, scoreA, fighterA, fighterB) {
+    const BASE_K = 32;
+    const weights = {
+        basic: 0.8,
+        experience: 0.8,
+        titleFight: 1.4,
+        activity: 1.2,
+        winType: 1.4,
+        striking: 1.2,
+        ground: 1.2,
+        winStreak: 1.4,
+        category: 1.4
+    };
+
+    function calculateWeightedElo(fighter) {
+        let totalWeight = 0;
+        let weightedSum = 0;
+        for (const [type, weight] of Object.entries(weights)) {
+            if (fighter[`${type}_elo`]) {
+                weightedSum += fighter[`${type}_elo`] * weight;
+                totalWeight += weight;
+            }
+        }
+        return weightedSum / totalWeight;
+    }
+
+    const weightedEloA = calculateWeightedElo(fighterA);
+    const weightedEloB = calculateWeightedElo(fighterB);
+
+    const expectedScoreA = 1 / (1 + Math.pow(10, (weightedEloB - weightedEloA) / 400));
+    const changeA = BASE_K * (scoreA - expectedScoreA);
+
+    const newRatingA = weightedEloA + changeA;
+    const newRatingB = weightedEloB - changeA;
+
+    // Mise à jour de l'évolution du ELO combiné
+    fighterA.combinedEloEvolution.push({ elo: newRatingA, date: new Date() });
+    fighterB.combinedEloEvolution.push({ elo: newRatingB, date: new Date() });
+
+    return {
+        newRatingA: newRatingA,
+        newRatingB: newRatingB,
+        changeA: Math.round(changeA),
+        changeB: Math.round(-changeA)
+    };
+}
+
+function updateCombinedEloEvolution(rating, newEntry) {
+    if (!rating.combinedEloEvolution) {
+        rating.combinedEloEvolution = [];
+    }
+
+    const existingEntryIndex = rating.combinedEloEvolution.findIndex(
+        entry => entry.date.getTime() === newEntry.date.getTime()
+    );
+
+    if (existingEntryIndex !== -1) {
+        rating.combinedEloEvolution[existingEntryIndex] = newEntry;
+    } else {
+        rating.combinedEloEvolution.push(newEntry);
+    }
+}
+
+function cleanCombinedEloEvolution(evolution, fightDates) {
+    console.log("Cleaning evolution:", evolution);
+    console.log("Using fightDates:", fightDates);
+
+    if (!Array.isArray(fightDates)) {
+        console.error("fightDates is not an array:", fightDates);
+        return evolution; // Retourne l'évolution originale si fightDates n'est pas un tableau
+    }
+
+    if (fightDates.length === 0) {
+        console.warn("fightDates is empty");
+        return evolution; // Retourne l'évolution originale si fightDates est vide
+    }
+
+    const uniqueEntries = new Map();
+
+    evolution.forEach(entry => {
+        const date = new Date(entry.date);
+        // Ne garder que les entrées correspondant aux dates réelles des combats
+        if (fightDates.some(fightDate => fightDate.getTime() === date.getTime())) {
+            uniqueEntries.set(date.toISOString(), {
+                elo: entry.elo,
+                date: date
+            });
+        }
+    });
+
+    return Array.from(uniqueEntries.values())
+        .sort((a, b) => a.date - b.date);
+}
+
 function calculatePeakElo(currentPeakElo, newCombinedElo, currentDate, currentWinStreak) {
     if (newCombinedElo > currentPeakElo) {
         return {
@@ -544,7 +638,7 @@ function calculatePeakElo(currentPeakElo, newCombinedElo, currentDate, currentWi
             peak_elo_winStreak: currentWinStreak
         };
     }
-    return null; // Retourne null si le peak ELO n'a pas changé
+    return null;
 }
 
 module.exports = { 
@@ -559,4 +653,6 @@ module.exports = {
     calculateCombinedElo,
     calculateCategoryElo, 
     calculatePeakElo,
+    updateCombinedEloEvolution,
+    cleanCombinedEloEvolution
 };

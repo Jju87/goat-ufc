@@ -3,7 +3,7 @@
 const Fighter = require('../models/fighter');
 const Fight = require('../models/fight');
 const EloRating = require('../models/eloRating');
-const { calculateBasicElo, calculateExperienceElo, calculateTitleFightElo, calculateWinTypeElo, calculateStrikingElo, calculateGroundElo, calculateActivityElo, calculateWinStreakElo, calculateCategoryElo, calculateCombinedElo, calculatePeakElo} = require('../utils/eloCalculations');
+const { calculateBasicElo, calculateExperienceElo, calculateTitleFightElo, calculateWinTypeElo, calculateStrikingElo, calculateGroundElo, calculateActivityElo, calculateWinStreakElo, calculateCategoryElo, calculateCombinedElo, calculatePeakElo, updateCombinedEloEvolution, cleanCombinedEloEvolution} = require('../utils/eloCalculations');
 const { getUFCStats } = require('../models/UFCStats');
 const fs = require('fs');
 const path = require('path');
@@ -40,6 +40,8 @@ exports.calculateAllElos = async (req, res) => {
 
         // Calculate ELO ratings for all fights
         const fights = await Fight.find().sort({ date: 1 });
+        const fightDates = fights.map(fight => new Date(fight.date));
+
 
         for (let fight of fights) {
             const [ratingA, ratingB] = await Promise.all([
@@ -58,7 +60,11 @@ exports.calculateAllElos = async (req, res) => {
             else scoreA = 0.5;
 
             // Calculate basic ELO
-            const { newRatingA: newBasicA, newRatingB: newBasicB } = calculateBasicElo(ratingA.basic_elo, ratingB.basic_elo, scoreA);
+            const { newRatingA: newBasicA, newRatingB: newBasicB } = calculateBasicElo(
+                ratingA.basic_elo, 
+                ratingB.basic_elo, 
+                scoreA
+            );
             // logToFile("Inputs for calculateExperienceElo:", {
             //     ratingA: ratingA.experience_elo,
             //     ratingB: ratingB.experience_elo,
@@ -163,6 +169,18 @@ exports.calculateAllElos = async (req, res) => {
                 ratingB,
             );
 
+            const newCombinedEloEntryA = {
+                elo: newCombinedA,
+                date: new Date(fight.date)
+            };
+            updateCombinedEloEvolution(ratingA, newCombinedEloEntryA);
+            const newCombinedEloEntryB = {
+                elo: newCombinedB,
+                date: new Date(fight.date)
+            };
+            updateCombinedEloEvolution(ratingB, newCombinedEloEntryB);
+
+
             // Update ratings
             ratingA.basic_elo = newBasicA;
             ratingB.basic_elo = newBasicB;
@@ -228,9 +246,22 @@ exports.calculateAllElos = async (req, res) => {
                 ratingB.peak_elo_winStreak = newPeakB.peak_elo_winStreak;
             
             }
+
+            // Nettoyage et tri de combinedEloEvolution
+            ratingA.combinedEloEvolution = cleanCombinedEloEvolution(ratingA.combinedEloEvolution);
+            ratingB.combinedEloEvolution = cleanCombinedEloEvolution(ratingB.combinedEloEvolution);
+
             // Promise.all is used to update both ratings at the same time
             await Promise.all([ratingA.save(), ratingB.save()]);
+
         }
+
+        const allFighters = await EloRating.find();
+        await Promise.all(allFighters.map(async (fighter) => {
+            fighter.combinedEloEvolution = cleanCombinedEloEvolution(fighter.combinedEloEvolution, fightDates);
+        await fighter.save();
+        }));
+
         res.status(200).json({ message: "All ELOs calculated successfully" });
     } catch (error) {
         console.error(error);
@@ -428,42 +459,6 @@ exports.getCategoryEloRanking = async (req, res) => {
 exports.getCombinedEloRanking = async (req, res) => {
     try {
         const rankings = await EloRating.find().sort({ combined_elo: -1 });
-        const allFights = await Fight.find().sort({ date: 1 });
-
-        logToFile("Simulation de l'évolution des Combined ELO:", 'combined');
-
-        const currentElos = new Map();
-
-        for (const fight of allFights) {
-            const fighterA = await getOrCreateFighter(fight.R_fighter, currentElos);
-            const fighterB = await getOrCreateFighter(fight.B_fighter, currentElos);
-
-            let scoreA;
-            if (fight.Winner === fight.R_fighter) scoreA = 1;
-            else if (fight.Winner === fight.B_fighter) scoreA = 0;
-            else scoreA = 0.5;
-
-            const { newRatingA, newRatingB, changeA, changeB } = calculateCombinedElo(
-                fighterA.combined_elo,
-                fighterB.combined_elo,
-                scoreA,
-                fighterA,
-                fighterB
-            );
-
-            logToFile(`
-                Date: ${new Date(fight.date).toLocaleDateString()}
-                Fight: ${fight.R_fighter} vs ${fight.B_fighter}
-                Result: ${fight.Winner === fight.R_fighter ? fight.R_fighter + " wins" : 
-                            fight.Winner === fight.B_fighter ? fight.B_fighter + " wins" : "Draw or No Contest"}
-                ${fight.R_fighter}: ${fighterA.combined_elo.toFixed(2)} -> ${newRatingA.toFixed(2)} (${changeA >= 0 ? "+" : ""}${changeA.toFixed(2)})
-                ${fight.B_fighter}: ${fighterB.combined_elo.toFixed(2)} -> ${newRatingB.toFixed(2)} (${changeB >= 0 ? "+" : ""}${changeB.toFixed(2)})
-            `, 'combined');
-
-            updateFighterElo(fighterA, newRatingA, currentElos);
-            updateFighterElo(fighterB, newRatingB, currentElos);
-        }
-
         res.status(200).json(rankings);
     } catch (error) {
         logToFile(`Error: ${error.message}`, 'combined');
@@ -471,34 +466,6 @@ exports.getCombinedEloRanking = async (req, res) => {
     }
 };
 
-async function getOrCreateFighter(fighterName, currentElos) {
-    if (!currentElos.has(fighterName)) {
-        const fighter = await EloRating.findOne({ fighter_name: fighterName }) || createInitialFighterObject(fighterName);
-        currentElos.set(fighterName, fighter);
-    }
-    return currentElos.get(fighterName);
-}
-
-function createInitialFighterObject(fighterName) {
-    return {
-        fighter_name: fighterName,
-        basic_elo: 1000,
-        experience_elo: 1000,
-        titleFight_elo: 1000,
-        winType_elo: 1000,
-        striking_elo: 1000,
-        ground_elo: 1000,
-        activity_elo: 1000,
-        winStreak_elo: 1000,
-        category_elo: 1000,
-        combined_elo: 1000
-    };
-}
-
-function updateFighterElo(fighter, newElo, currentElos) {
-    fighter.combined_elo = newElo;
-    currentElos.set(fighter.fighter_name, fighter);
-}
 
 exports.getPeakEloRanking = async (req, res) => {
     try {
