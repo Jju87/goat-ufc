@@ -66,41 +66,47 @@ function calculateExperienceElo(ratingA, ratingB, scoreA, fightCountA, fightCoun
 
 function calculateTitleFightElo(ratingA, ratingB, scoreA, fightType) {
     const BASE_K = 32;
-    const titleFightBonus = 3; // 300% bonus pour les combats de titre
+    const titleFightBonusWin = 3; // 300% bonus pour le gagnant d'un combat de titre
+    const titleFightBonusLoss = 1.5; // 150% "bonus" pour le perdant d'un combat de titre
 
-    // Vérifier si c'est un combat pour le titre
     const isTitleFight = fightType.toLowerCase().includes('title');
 
-    // Ajuster le facteur K si c'est un combat pour le titre
-    const K = isTitleFight ? BASE_K * titleFightBonus : BASE_K;
+    let KA, KB;
+    if (isTitleFight) {
+        KA = scoreA === 1 ? BASE_K * titleFightBonusWin : BASE_K * titleFightBonusLoss;
+        KB = scoreA === 0 ? BASE_K * titleFightBonusWin : BASE_K * titleFightBonusLoss;
+    } else {
+        KA = KB = BASE_K;
+    }
 
     const expectedScoreA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
-    const newRatingA = ratingA + K * (scoreA - expectedScoreA);
-    const newRatingB = ratingB + K * ((1 - scoreA) - (1 - expectedScoreA));
+    const newRatingA = ratingA + KA * (scoreA - expectedScoreA);
+    const newRatingB = ratingB + KB * ((1 - scoreA) - (1 - expectedScoreA));
 
     return { 
         newRatingA: newRatingA, 
         newRatingB: newRatingB,
         isTitleFight: isTitleFight
     };
-}
+};
 
 function calculateWinTypeElo(ratingA, ratingB, scoreA, win_By, last_Round, last_Round_Time, isTitleFight) {
     const BASE_K = 32;
     let bonusFactor = 1;
+    const winTypeMaxBonusLoss = 1.5; // 150% "bonus" maximum pour le perdant
 
     // Bonus based on win type
     if (win_By === "Submission" || win_By === "KO/TKO") {
-        bonusFactor += 1; // 50% bonus
+        bonusFactor += 1; // 100% bonus
     } else if (win_By === "Decision - Unanimous") {
-        bonusFactor += 0.3; // 20% bonus
+        bonusFactor += 0.3; // 30% bonus
     }
 
     // Bonus based on last round
-    if (last_Round === 1 ) {
-        bonusFactor += 0.5; // 40% bonus added
-    } else if (last_Round === 2 ) {
-        bonusFactor += 0.2; // 20% bonus added
+    if (last_Round === 1) {
+        bonusFactor += 0.2; // 20% bonus added 
+    } else if (last_Round === 2) {
+        bonusFactor += 0.1; // 10% bonus added
     }
 
     // Conversion of last round time to seconds
@@ -110,32 +116,38 @@ function calculateWinTypeElo(ratingA, ratingB, scoreA, win_By, last_Round, last_
     // Bonus based on last round time (only for first round)
     if (last_Round === 1) {
         if (timeInSeconds <= 30) {
-            bonusFactor += 1; // 100% bonus added
-        } else if (timeInSeconds <= 60) {
             bonusFactor += 0.5; // 50% bonus added
+        } else if (timeInSeconds <= 60) {
+            bonusFactor += 0.3; // 30% bonus added
         } else if (timeInSeconds <= 120) {
-            bonusFactor += 0.2; // 20% bonus added
-        } else if (timeInSeconds <= 180) {
             bonusFactor += 0.1; // 10% bonus added
         } 
     }
 
     // Apply title fight bonus if it's a title fight
     if (isTitleFight) {
-        bonusFactor *= 1.5; // 50% bonus
+        bonusFactor *= 1.5; // 50% additional bonus for title fights
     }
 
-    const K = BASE_K * bonusFactor;
+    let KA, KB;
+    KA = scoreA === 1 ? BASE_K * bonusFactor : BASE_K * winTypeMaxBonusLoss;
+    KB = scoreA === 0 ? BASE_K * bonusFactor : BASE_K * winTypeMaxBonusLoss;
 
     const expectedScoreA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
-    const newRatingA = ratingA + K * (scoreA - expectedScoreA);
-    const newRatingB = ratingB + K * ((1 - scoreA) - (1 - expectedScoreA));
+    let changeA = KA * (scoreA - expectedScoreA);
+    let changeB = KB * ((1 - scoreA) - (1 - expectedScoreA));
+
+    const newRatingA = ratingA + changeA;
+    const newRatingB = ratingB + changeB;
 
     return { 
         newRatingA: newRatingA, 
         newRatingB: newRatingB,
         bonusFactor,
-        effectiveK: K,
+        effectiveKA: KA,
+        effectiveKB: KB,
+        changeA,
+        changeB
     };
 }
 
@@ -231,10 +243,10 @@ function calculateGroundElo(ratingA, ratingB, scoreA, win_By, R_TD, B_TD, R_CTRL
     function calculateLogBonus(strikerA, strikerB) {
         strikerA = isNaN(strikerA) ? 0 : strikerA;
         strikerB = isNaN(strikerB) ? 0 : strikerB;
-        if (strikerB === 0) return strikerA > 0 ? 0.5 : 0; // Réduit de 2.5 à 0.5
+        if (strikerB === 0) return strikerA > 0 ? 1 : 0; // Réduit de 2.5 à 1
         const ratio = strikerA / strikerB;
         if (ratio <= 1) return 0;
-        return Math.min(Math.log10(ratio) * 0.3, 0.5); // Réduit le multiplicateur de 1.2 à 0.3 et le max de 2.5 à 0.5
+        return Math.min(Math.log10(ratio) * 0.5, 1); // Réduit le multiplicateur de 1.2 à 0.5 et le max de 2.5 à 0.5
     }
 
     // Bonus pour soumission
@@ -243,7 +255,7 @@ function calculateGroundElo(ratingA, ratingB, scoreA, win_By, R_TD, B_TD, R_CTRL
     }
 
     // Calcul du bonus de takedown (max 150%) compté seulement pour le vainqueur
-    const takedownBonus = Math.min(winnerTakedowns * 0.2, 1.5); // 20% par takedown, max 150%
+    const takedownBonus = Math.min(winnerTakedowns * 0.3, 1.5); // 30% par takedown, max 150%
     bonusFactor += takedownBonus;
 
     // Bonus pour le temps de contrôle
@@ -280,7 +292,7 @@ function calculateGroundElo(ratingA, ratingB, scoreA, win_By, R_TD, B_TD, R_CTRL
 
 function calculateActivityElo(ratingA, ratingB, scoreA, currentFight, allFights) {
     const BASE_K = 32;
-    
+
     function getMonthsBetween(date1, date2) {
         const d1 = new Date(date1);
         const d2 = new Date(date2);
@@ -298,36 +310,27 @@ function calculateActivityElo(ratingA, ratingB, scoreA, currentFight, allFights)
     function calculateActivityBonus(fighterName) {
         const fighterFights = allFights.filter(fight => 
             (fight.R_fighter === fighterName || fight.B_fighter === fighterName) &&
-            new Date(fight.date) <= new Date(currentFight.date)
-        ).sort((a, b) => new Date(a.date) - new Date(b.date));
+            new Date(fight.date) < new Date(currentFight.date)
+        ).sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        if (fighterFights.length < 2) return 1;
+        if (fighterFights.length === 0) return 1; // Pas de bonus pour les nouveaux combattants
 
-        let totalBonus = 0;
+        const monthsSinceLastFight = getMonthsBetween(fighterFights[0].date, currentFight.date);
 
-        for (let i = 1; i < fighterFights.length; i++) {
-            const monthsBetween = getMonthsBetween(fighterFights[i-1].date, fighterFights[i].date);
-
-            let bonus;
-            if (monthsBetween < 1) bonus = 3;
-            else if (monthsBetween < 2) bonus = 2.5;
-            else if (monthsBetween < 3) bonus = 2;
-            else if (monthsBetween < 6) bonus = 1.5;
-            else if (monthsBetween < 12) bonus = 1.1;
-            else bonus = 1;
-
-            totalBonus += bonus;
-        }
-
-        const averageBonus = totalBonus / (fighterFights.length - 1);
-        return Math.min(averageBonus, 2);
+        // Bonus basé sur l'activité récente
+        if (monthsSinceLastFight < 1) return 5;
+        if (monthsSinceLastFight < 2) return 3;
+        if (monthsSinceLastFight < 3) return 2,5;
+        if (monthsSinceLastFight < 4) return 2;
+        if (monthsSinceLastFight < 7) return 1.5;
+        if (monthsSinceLastFight < 12) return 1.1;
+        return 1; // Pas de bonus pour les combattants inactifs depuis plus de 
     }
 
-    // Calculer le bonus seulement pour le gagnant
-    const activityBonusA = scoreA === 1 ? calculateActivityBonus(currentFight.R_fighter) : 1;
-    const activityBonusB = scoreA === 0 ? calculateActivityBonus(currentFight.B_fighter) : 1;
+    const activityBonusA = calculateActivityBonus(currentFight.R_fighter);
+    const activityBonusB = calculateActivityBonus(currentFight.B_fighter);
 
-    // Appliquer le bonus au facteur K seulement pour le gagnant
+    // Appliquer le bonus seulement au gagnant
     const KA = BASE_K * (scoreA === 1 ? activityBonusA : 1);
     const KB = BASE_K * (scoreA === 0 ? activityBonusB : 1);
 
@@ -399,50 +402,6 @@ function calculateWinStreakElo(ratingA, ratingB, scoreA, currentFight, allFights
         winStreakBonusB: bonusB,
         newCurrentWinStreakA,
         newCurrentWinStreakB
-    };
-}
-
-
-function calculateCombinedElo(ratingA, ratingB, scoreA, fighterA, fighterB) {
-    const BASE_K = 32;
-    const weights = {
-        basic: 0.8,
-        experience: 0.8,
-        titleFight: 1.4,
-        activity: 1.2,
-        winType: 1.4,
-        striking: 1.2,
-        ground: 1.2,
-        winStreak: 1.4,
-        category: 1.4
-    };
-
-    function calculateWeightedElo(fighter) {
-        let totalWeight = 0;
-        let weightedSum = 0;
-        for (const [type, weight] of Object.entries(weights)) {
-            if (fighter[`${type}_elo`]) {
-                weightedSum += fighter[`${type}_elo`] * weight;
-                totalWeight += weight;
-            }
-        }
-        return weightedSum / totalWeight;
-    }
-
-    const weightedEloA = calculateWeightedElo(fighterA);
-    const weightedEloB = calculateWeightedElo(fighterB);
-
-    const expectedScoreA = 1 / (1 + Math.pow(10, (weightedEloB - weightedEloA) / 400));
-    const changeA = BASE_K * (scoreA - expectedScoreA);
-
-    const newRatingA = weightedEloA + changeA;
-    const newRatingB = weightedEloB - changeA;
-
-    return {
-        newRatingA: newRatingA,
-        newRatingB: newRatingB,
-        changeA: Math.round(changeA),
-        changeB: Math.round(-changeA)
     };
 }
 
@@ -539,13 +498,13 @@ function calculateCategoryElo(ratingA, ratingB, scoreA, fight, fighterA, fighter
 function calculateCombinedElo(ratingA, ratingB, scoreA, fighterA, fighterB) {
     const BASE_K = 32;
     const weights = {
-        basic: 0.8,
-        experience: 0.8,
-        titleFight: 1.4,
-        activity: 1.2,
-        winType: 1.4,
-        striking: 1.2,
-        ground: 1.2,
+        basic: 1,
+        experience: 1,
+        titleFight: 1.6,
+        activity: 1,
+        winType: 1.6,
+        striking: 1.4,
+        ground: 1.4,
         winStreak: 1.4,
         category: 1.4
     };
@@ -597,37 +556,43 @@ function updateCombinedEloEvolution(rating, newEntry) {
     } else {
         rating.combinedEloEvolution.push(newEntry);
     }
+
+    // Tri par date après chaque mise à jour
+    rating.combinedEloEvolution.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
-function cleanCombinedEloEvolution(evolution, fightDates) {
+function cleanCombinedEloEvolution(evolution, fightDates = null) {
     console.log("Cleaning evolution:", evolution);
     console.log("Using fightDates:", fightDates);
 
-    if (!Array.isArray(fightDates)) {
-        console.error("fightDates is not an array:", fightDates);
-        return evolution; // Retourne l'évolution originale si fightDates n'est pas un tableau
+    if (!evolution || evolution.length === 0) {
+        return [];
     }
 
-    if (fightDates.length === 0) {
-        console.warn("fightDates is empty");
-        return evolution; // Retourne l'évolution originale si fightDates est vide
-    }
-
+    // Créer un Map pour éliminer les doublons
     const uniqueEntries = new Map();
 
     evolution.forEach(entry => {
         const date = new Date(entry.date);
-        // Ne garder que les entrées correspondant aux dates réelles des combats
-        if (fightDates.some(fightDate => fightDate.getTime() === date.getTime())) {
-            uniqueEntries.set(date.toISOString(), {
-                elo: entry.elo,
-                date: date
-            });
-        }
+        uniqueEntries.set(date.getTime(), {
+            elo: entry.elo,
+            date: date
+        });
     });
 
-    return Array.from(uniqueEntries.values())
+    // Convertir le Map en tableau et trier
+    let cleanedEvolution = Array.from(uniqueEntries.values())
         .sort((a, b) => a.date - b.date);
+
+    // Si fightDates est fourni, filtrer les entrées
+    if (fightDates && Array.isArray(fightDates) && fightDates.length > 0) {
+        const fightDateTimes = new Set(fightDates.map(d => new Date(d).getTime()));
+        cleanedEvolution = cleanedEvolution.filter(entry => 
+            fightDateTimes.has(entry.date.getTime())
+        );
+    }
+
+    return cleanedEvolution;
 }
 
 function calculatePeakElo(currentPeakElo, newCombinedElo, currentDate, currentWinStreak) {
